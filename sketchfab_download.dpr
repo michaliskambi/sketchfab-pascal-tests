@@ -1,16 +1,18 @@
 { Search for and download a model from Sketchfab.
-  
+
   Compile using CGE build tool, it will automatically
-  define ObjFpc mode, $H+ etc. 
+  define ObjFpc mode, $H+ etc.
 
   TODO: Use TCastleDownload for all TFPHTTPClient calls.
 }
+
+{$apptype CONSOLE}
 
 program SketchfabDownload;
 
 uses SysUtils, Classes,
   {$ifndef VER3_0} OpenSSLSockets, {$endif}
-  fpHTTPClient, fpJSON, JSONParser, Zipper,  
+  fpHTTPClient, fpJSON, JSONParser, Zipper,
   CastleFilesUtils, CastleDownload, CastleStringUtils, CastleURIUtils;
 
 type
@@ -21,7 +23,7 @@ type
   public
     ModelID: String;
     { Search Sketchfab for Query, return list of model ids. }
-    class function Search(const Query: String): TStringList;   
+    class function Search(const Query: String): TStringList;
     { Search Sketchfab for Query, show list of model ids, return 1st. }
     class function SearchGetFirst(const Query: String): String;
     { Set Download* fields based on ModelID }
@@ -138,7 +140,7 @@ begin
   DirName := 'model/' + ModelID;
   RemoveNonEmptyDir(DirName, true);
   ForceDirectories(DirName);
-  
+
   Zip := TUnZipper.Create;
   try
     Zip.FileName := 'model.zip';
@@ -158,7 +160,7 @@ var
 begin
   Exe := FindExe('view3dscene');
   if Exe = '' then
-    raise Exception.Create('view3dscene not found on $PATH, please install Castle Game Engine and make sure view3dscene is on $PATH');  
+    raise Exception.Create('view3dscene not found on $PATH, please install Castle Game Engine and make sure view3dscene is on $PATH');
   ExecuteProcess(Exe, ['model/' + ModelID + '/scene.gltf']);
 end;
 
@@ -182,6 +184,6 @@ begin
     Model.ExtractZip;
     Model.RunView3dscene;
   finally
-    FreeAndNil(Model);  
+    FreeAndNil(Model);
   end;
 end.

@@ -32,16 +32,20 @@ Purpose: Sketchfab integration with [Castle Game Engine](https://castle-engine.i
     Downloading model from: https://sketchfab-prod-media.s3.amazonaws.com/archives/....
     Download size: 82.61 MB
     Model downloaded to: model.zip, file size: 82.61 MB
-    Model extracted to: model/4737a3b84e00415b9d8bb42ae44285b2    
+    Model extracted to: model/4737a3b84e00415b9d8bb42ae44285b2
     ```
 
-* Pass a command-line parameter to change the query. It is `cthulhu` by default. Use anything else, this is just a query string for Sketchfab, you can look for anything on Sketchfab.
+* Pass a command-line parameter to change the query. It is `cthulhu` by default. Use anything else, this is just a query string for Sketchfab, you can look for anything on Sketchfab. E.g. run
+
+    ```
+    ./sketchfab_download castle
+    ```
 
 * By default is downloads the first search hit, but you can easily customize it.
 
-    * Click on the list of URLs to easily inspect the models.
+    * Click on the list of URLs in console to easily inspect the models.
 
-    * If you want download a particular model, then comment out
+    * If you want to download a particular model, then comment out
 
         ```
         ModelID := TSketchfabModel.SearchGetFirst(Query);
