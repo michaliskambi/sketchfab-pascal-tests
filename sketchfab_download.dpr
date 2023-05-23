@@ -1,14 +1,17 @@
 { Search for and download a model from Sketchfab.
   
   Compile using CGE build tool, it will automatically
-  define ObjFpc mode, $H+ etc. }
+  define ObjFpc mode, $H+ etc. 
+
+  TODO: Use TCastleDownload for all TFPHTTPClient calls.
+}
 
 program SketchfabDownload;
 
 uses SysUtils, Classes,
   {$ifndef VER3_0} OpenSSLSockets, {$endif}
-  fpHTTPClient, fpJSON, JSONParser, Zipper,
-  CastleFilesUtils, CastleDownload, CastleStringUtils;
+  fpHTTPClient, fpJSON, JSONParser, Zipper,  
+  CastleFilesUtils, CastleDownload, CastleStringUtils, CastleURIUtils;
 
 type
   TSketchfabModel = class
@@ -17,6 +20,10 @@ type
     DownloadSize: Int64;
   public
     ModelID: String;
+    { Search Sketchfab for Query, return list of model ids. }
+    class function Search(const Query: String): TStringList;   
+    { Search Sketchfab for Query, show list of model ids, return 1st. }
+    class function SearchGetFirst(const Query: String): String;
     { Set Download* fields based on ModelID }
     procedure StartDownload;
     { Use Download* fields to get model.zip }
@@ -26,6 +33,54 @@ type
     { Run view3dscene on extracted model. }
     procedure RunView3dscene;
   end;
+
+class function TSketchfabModel.Search(const Query: String): TStringList;
+var
+  HTTP: TFPHTTPClient;
+  Response: String;
+  JSONData: TJSONData;
+  JSONArray: TJSONArray;
+  JSONObject: TJSONObject;
+  I: Integer;
+begin
+  Result := TStringList.Create;
+  HTTP := TFPHTTPClient.Create(nil);
+  try
+    Response := HTTP.Get('https://api.sketchfab.com/v3/search?type=models&q=' + InternalUriEscape(Query));
+    JSONData := GetJSON(Response);
+    if JSONData.JSONType = jtObject then
+    begin
+      JSONArray := TJSONObject(JSONData).Arrays['results'];
+      for I := 0 to JSONArray.Count - 1 do
+      begin
+        JSONObject := JSONArray.Objects[I];
+        Result.Add(JSONObject.Strings['uid']);
+      end;
+    end else
+      raise Exception.Create('Unexpected JSON response: ' + Response);
+  finally
+    FreeAndNil(HTTP);
+  end;
+end;
+
+class function TSketchfabModel.SearchGetFirst(const Query: String): String;
+var
+  Models: TStringList;
+  I: Integer;
+
+begin
+  Models := TSketchfabModel.Search(Query);
+  try
+    Writeln('Found ', Models.Count, ' models for query: ', Query);
+    if Models.Count = 0 then
+      raise Exception.Create('No models found for query: ' + Query);
+    for I := 0 to Models.Count - 1 do
+      Writeln(I, ' : https://sketchfab.com/3d-models/', Models[I]);
+    Result := Models[0];
+  finally
+    FreeAndNil(Models);
+  end;
+end;
 
 procedure TSketchfabModel.StartDownload;
 const
@@ -108,13 +163,16 @@ begin
 end;
 
 var
+  Query: String = 'cthulhu';
   ModelID: String;
   Model: TSketchfabModel;
 begin
-  // TODO: Search for model id on Sketchfab
-  
-  // https://sketchfab.com/3d-models/statue-of-cthulhu-f936c896d628415597b762d4e3944ffc
-  ModelID := 'f936c896d628415597b762d4e3944ffc';
+  if ParamCount >= 1 then
+    Query := ParamStr(1);
+  ModelID := TSketchfabModel.SearchGetFirst(Query);
+
+  // from https://sketchfab.com/3d-models/statue-of-cthulhu-f936c896d628415597b762d4e3944ffc
+  // ModelID := 'f936c896d628415597b762d4e3944ffc';
 
   Model := TSketchfabModel.Create;
   try
