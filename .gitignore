@@ -1,0 +1,20 @@
+# Files ignored by GIT version control
+
+# Build tool (and compiler) temporary output
+castle-engine-output
+
+# Unix executable
+sketchfab_download
+# Windows executable
+sketchfab_download.exe
+# Library files placed alongside Windows executable
+*.dll
+# Auto-updated by CGE tools when compiling Windows build
+
+# May contain secret data
+AndroidSigningProperties.txt
+sketchfab_token.inc
+
+# temp stuff
+response.json
+model.zip
