@@ -46,7 +46,7 @@ begin
   Result := TStringList.Create;
   HTTP := TFPHTTPClient.Create(nil);
   try
-    Response := HTTP.Get('https://api.sketchfab.com/v3/search?type=models&q=' + InternalUriEscape(Query));
+    Response := HTTP.Get('https://api.sketchfab.com/v3/search?type=models&downloadable=true&q=' + InternalUriEscape(Query));
     JSONData := GetJSON(Response);
     if JSONData.JSONType = jtObject then
     begin
