@@ -38,12 +38,14 @@ type
       Not used in this application, but will be useful for UI in CGE. }
     Name, Description: String;
     FaceCount: UInt64;
-    ThumbnailURL: String;
+    ThumbnailUrl: String;
+    License: String;
 
     { Search Sketchfab for Query, return list of model ids. }
     class function Search(const Query: String): TSketchfabModelList;
     { Search Sketchfab for Query, show list of model ids, return 1st. }
     class function SearchGetFirst(const Query: String): TSketchfabModel;
+
     { Set Download* fields based on ModelId }
     procedure StartDownload;
     { Use Download* fields to get model.zip }
@@ -53,6 +55,8 @@ type
     { Run view3dscene on extracted model. }
     procedure RunView3dscene;
   end;
+
+{ TSketchfabModel (class methods) --------------------------------------------- }
 
 class function TSketchfabModel.Search(const Query: String): TSketchfabModelList;
 
@@ -131,7 +135,8 @@ begin
         Model.Name := JSONObject.Strings['name'];
         Model.Description := JSONObject.Strings['description'];
         Model.FaceCount := JSONObject.QWords['faceCount'];
-        Model.ThumbnailURL := SearchThumbnails(JSONObject.Objects['thumbnails'].Arrays['images'], BestThumbnailSize);
+        Model.ThumbnailUrl := SearchThumbnails(JSONObject.Objects['thumbnails'].Arrays['images'], BestThumbnailSize);
+        Model.License := JSONObject.Objects['license'].Strings['label'];
         Result.Add(Model);
       end;
     end else
@@ -142,6 +147,21 @@ begin
 end;
 
 class function TSketchfabModel.SearchGetFirst(const Query: String): TSketchfabModel;
+
+  function DescriptionCut(const OriginalDescription: String): String;
+  const
+    MaxLen = 80;
+  var
+    NewlinePos: Integer;
+  begin
+    Result := OriginalDescription;
+    NewlinePos := CharsPos([#10, #13], Result);
+    if NewlinePos <> 0 then
+      Result := Copy(Result, 1, NewlinePos - 1);
+    if Length(Result) > MaxLen then
+      Result := Copy(Result, 1, MaxLen) + '...';
+  end;
+
 var
   Models: TSketchfabModelList;
   I: Integer;
@@ -156,20 +176,24 @@ begin
         '  View on Sketchfab: https://sketchfab.com/3d-models/%s' + NL +
         '  Description: %s' + NL +
         '  Face Count: %d' + NL +
+        '  License: %s' + NL +
         '  Best (closest to %d) thumbnail: %s' + NL, [
         I,
         Models[I].Name,
         Models[I].ModelId,
-        Models[I].Description,
+        DescriptionCut(Models[I].Description),
         Models[I].FaceCount,
+        Models[I].License,
         BestThumbnailSize,
-        Models[I].ThumbnailURL
+        Models[I].ThumbnailUrl
       ]);
     Result := Models.ExtractIndex(0);
   finally
     FreeAndNil(Models);
   end;
 end;
+
+{ TSketchfabModel (instance methods) ----------------------------------------- }
 
 procedure TSketchfabModel.StartDownload;
 const
