@@ -1,9 +1,18 @@
 { Search for and download a model from Sketchfab.
 
-  Compile using CGE build tool, it will automatically
-  define ObjFpc mode, $H+ etc.
+  Before compiling, create a file sketchfab_token.inc with your Sketchfab token
+  as Pascal string, like '123456789'.
+  You can find your Sketchfab token on https://sketchfab.com/settings/password .
 
-  TODO: Use TCastleDownload for all TFPHTTPClient calls.
+  Compile this application using Castle Game Engine editor or build tool,
+  it will automatically define proper syntax mode (FPC ObjFpc mode) and make
+  CGE units available. E.g.
+
+  - Open this directory in CGE editor and compile.
+  - Or run "castle-engine compile" from command-line in this directory.
+
+  Copyright 2023-2023 Michalis Kamburelis.
+  Licensed on the permissive terms (modified BSD 3-clause).
 }
 
 {$apptype CONSOLE}
