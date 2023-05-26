@@ -38,6 +38,9 @@ jobs:
       - name: Castle Game Engine - Build
         run: cd $CASTLE_ENGINE_PATH/tools/build-tool/ && ./castle-engine_compile.sh
 
+      - name: Add fake Sketchfab token
+        run: "echo \"'invalid token, just to test compilation'\" > $GITHUB_WORKSPACE/sketchfab_token.inc"
+
       - name: Package Windows
         run: $CASTLE_ENGINE_PATH/tools/build-tool/castle-engine package --os=win64 --cpu=x86_64 --verbose
       - name: Archive Artifacts
@@ -77,6 +80,9 @@ jobs:
         run: git clone --depth 1 --single-branch --branch snapshot https://github.com/castle-engine/castle-engine/
       - name: Castle Game Engine - Build
         run: cd $CASTLE_ENGINE_PATH/tools/build-tool/ && ./castle-engine_compile.sh
+
+      - name: Add fake Sketchfab token
+        run: "echo \"'invalid token, just to test compilation'\" > $GITHUB_WORKSPACE/sketchfab_token.inc"
 
       - name: Package macOS
         run: $CASTLE_ENGINE_PATH/tools/build-tool/castle-engine package --os=darwin --cpu=x86_64 --verbose
