@@ -89,11 +89,11 @@ class function TSketchfabModel.Search(const Query: String): TSketchfabModelList;
     if BestThumbnail <> nil then
     begin
       Result := BestThumbnail.Strings['url'];
-      WritelnLog('Best thumbnail dimensions: %d x %d, url: %s', [
-        BestThumbnail.Integers['width'],
-        BestThumbnail.Integers['height'],
-        Result
-      ]);
+      // WritelnLog('Best thumbnail dimensions: %d x %d, url: %s', [
+      //   BestThumbnail.Integers['width'],
+      //   BestThumbnail.Integers['height'],
+      //   Result
+      // ]);
     end else
       Result := '';
   end;
