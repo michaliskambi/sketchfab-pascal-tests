@@ -10,33 +10,90 @@
 
 program SketchfabDownload;
 
-uses SysUtils, Classes,
+uses SysUtils, Classes, Generics.Collections,
   {$ifndef VER3_0} OpenSSLSockets, {$endif}
   fpHTTPClient, fpJSON, JSONParser, Zipper,
-  CastleFilesUtils, CastleDownload, CastleStringUtils, CastleURIUtils, CastleLog;
+  CastleFilesUtils, CastleDownload, CastleStringUtils, CastleURIUtils, CastleLog,
+  CastleUtils;
+
+const
+  { Sketchfab API returns thumbnails in various sizes,
+    we will pick the closest one to this. }
+  BestThumbnailSize = 256;
 
 type
+  TSketchfabModel = class;
+
+  TSketchfabModelList = {$ifdef FPC}specialize{$endif} TObjectList<TSketchfabModel>;
+
   TSketchfabModel = class
   private
     DownloadURL: String;
     DownloadSize: Int64;
   public
-    ModelID: String;
+    ModelId: String;
+
+    { Various additional info about model,
+      set by @link(Search) and @link(SearchGetFirst).
+      Not used in this application, but will be useful for UI in CGE. }
+    Name, Description: String;
+    FaceCount: UInt64;
+    ThumbnailURL: String;
+
     { Search Sketchfab for Query, return list of model ids. }
-    class function Search(const Query: String): TStringList;
+    class function Search(const Query: String): TSketchfabModelList;
     { Search Sketchfab for Query, show list of model ids, return 1st. }
-    class function SearchGetFirst(const Query: String): String;
-    { Set Download* fields based on ModelID }
+    class function SearchGetFirst(const Query: String): TSketchfabModel;
+    { Set Download* fields based on ModelId }
     procedure StartDownload;
     { Use Download* fields to get model.zip }
     procedure DownloadZip;
-    { Extract model.zip to model/ModelID/ directory}
+    { Extract model.zip to model/ModelId/ directory}
     procedure ExtractZip;
     { Run view3dscene on extracted model. }
     procedure RunView3dscene;
   end;
 
-class function TSketchfabModel.Search(const Query: String): TStringList;
+class function TSketchfabModel.Search(const Query: String): TSketchfabModelList;
+
+  { Find thumbnail URL best matching given Size, in a JSON array
+    as returned by Sketchfab search query.
+    Returns '' if no thumbnail found. }
+  function SearchThumbnails(const Thumbnails: TJSONArray; const DesiredSize: Integer): String;
+  var
+    I: Integer;
+    Thumbnail: TJSONObject;
+    ThumbnailSize: Integer;
+    BestThumbnail: TJSONObject;
+    BestThumbnailSize: Integer;
+  begin
+    BestThumbnail := nil;
+    BestThumbnailSize := 0;
+    for I := 0 to Thumbnails.Count - 1 do
+    begin
+      Thumbnail := Thumbnails[I] as TJSONObject;
+      // average width and height
+      ThumbnailSize := (Thumbnail.Integers['width'] + Thumbnail.Integers['height']) div 2;
+      if (BestThumbnail = nil) or
+         ( Abs(ThumbnailSize - DesiredSize) <
+           Abs(BestThumbnailSize - DesiredSize) ) then
+      begin
+        BestThumbnail := Thumbnail;
+        BestThumbnailSize := ThumbnailSize;
+      end;
+    end;
+    if BestThumbnail <> nil then
+    begin
+      Result := BestThumbnail.Strings['url'];
+      WritelnLog('Best thumbnail dimensions: %d x %d, url: %s', [
+        BestThumbnail.Integers['width'],
+        BestThumbnail.Integers['height'],
+        Result
+      ]);
+    end else
+      Result := '';
+  end;
+
 var
   HTTP: TFPHTTPClient;
   Response: String;
@@ -44,8 +101,9 @@ var
   JSONArray: TJSONArray;
   JSONObject: TJSONObject;
   I: Integer;
+  Model: TSketchfabModel;
 begin
-  Result := TStringList.Create;
+  Result := TSketchfabModelList.Create(true);
   HTTP := TFPHTTPClient.Create(nil);
   try
     Response := HTTP.Get('https://api.sketchfab.com/v3/search?type=models&downloadable=true&q=' + InternalUriEscape(Query));
@@ -60,13 +118,21 @@ begin
       for I := 0 to JSONArray.Count - 1 do
       begin
         JSONObject := JSONArray.Objects[I];
+
         // sanity check
         if not JSONObject.Booleans['isDownloadable'] then
         begin
           WritelnWarning('Model %s not downloadable, even though we requested only downloadable');
           Continue;
         end;
-        Result.Add(JSONObject.Strings['uid']);
+
+        Model := TSketchfabModel.Create;
+        Model.ModelId := JSONObject.Strings['uid'];
+        Model.Name := JSONObject.Strings['name'];
+        Model.Description := JSONObject.Strings['description'];
+        Model.FaceCount := JSONObject.QWords['faceCount'];
+        Model.ThumbnailURL := SearchThumbnails(JSONObject.Objects['thumbnails'].Arrays['images'], BestThumbnailSize);
+        Result.Add(Model);
       end;
     end else
       raise Exception.Create('Unexpected JSON response: ' + Response);
@@ -75,9 +141,9 @@ begin
   end;
 end;
 
-class function TSketchfabModel.SearchGetFirst(const Query: String): String;
+class function TSketchfabModel.SearchGetFirst(const Query: String): TSketchfabModel;
 var
-  Models: TStringList;
+  Models: TSketchfabModelList;
   I: Integer;
 begin
   Models := TSketchfabModel.Search(Query);
@@ -86,8 +152,20 @@ begin
     if Models.Count = 0 then
       raise Exception.Create('No models found for query: ' + Query);
     for I := 0 to Models.Count - 1 do
-      WritelnLog('%d : https://sketchfab.com/3d-models/%s', [I, Models[I]]);
-    Result := Models[0];
+      WritelnLog('%d : %s' + NL +
+        '  View on Sketchfab: https://sketchfab.com/3d-models/%s' + NL +
+        '  Description: %s' + NL +
+        '  Face Count: %d' + NL +
+        '  Best (closest to %d) thumbnail: %s' + NL, [
+        I,
+        Models[I].Name,
+        Models[I].ModelId,
+        Models[I].Description,
+        Models[I].FaceCount,
+        BestThumbnailSize,
+        Models[I].ThumbnailURL
+      ]);
+    Result := Models.ExtractIndex(0);
   finally
     FreeAndNil(Models);
   end;
@@ -104,9 +182,9 @@ var
 begin
   Client := TFPHTTPClient.Create(nil);
   try
-    WritelnLog('Starting download of model id ', ModelID);
+    WritelnLog('Starting download of model id ', ModelId);
     Client.AddHeader('Authorization', 'Token ' + ApiToken);
-    Response := Client.Get(ApiUrl + '/' + ModelID + '/download');
+    Response := Client.Get(ApiUrl + '/' + ModelId + '/download');
   finally
     FreeAndNil(Client);
   end;
@@ -146,7 +224,7 @@ var
   DirName: String;
 begin
   { Unzip model.zip to model/ directory. }
-  DirName := 'model/' + ModelID;
+  DirName := 'model/' + ModelId;
   RemoveNonEmptyDir(DirName, true);
   ForceDirectories(DirName);
 
@@ -170,26 +248,24 @@ begin
   Exe := FindExe('view3dscene');
   if Exe = '' then
     raise Exception.Create('view3dscene not found on $PATH, please install Castle Game Engine and make sure view3dscene is on $PATH');
-  ExecuteProcess(Exe, ['model/' + ModelID + '/scene.gltf']);
+  ExecuteProcess(Exe, ['model/' + ModelId + '/scene.gltf']);
 end;
 
 var
   Query: String = 'cthulhu';
-  ModelID: String;
   Model: TSketchfabModel;
 begin
   InitializeLog;
 
   if ParamCount >= 1 then
     Query := ParamStr(1);
-  ModelID := TSketchfabModel.SearchGetFirst(Query);
+  Model := TSketchfabModel.SearchGetFirst(Query);
 
   // from https://sketchfab.com/3d-models/statue-of-cthulhu-f936c896d628415597b762d4e3944ffc
-  // ModelID := 'f936c896d628415597b762d4e3944ffc';
+  // Model := TSketchfabModel.Create;
+  // Model.ModelId := 'f936c896d628415597b762d4e3944ffc';
 
-  Model := TSketchfabModel.Create;
   try
-    Model.ModelID := ModelID;
     Model.StartDownload;
     Model.DownloadZip;
     Model.ExtractZip;
