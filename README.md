@@ -57,6 +57,14 @@ Purpose: Sketchfab integration with [Castle Game Engine](https://castle-engine.i
         ModelID := '42002fa6abcc41e18abeb3da9edca096';
         ```
 
+## Licensing
+
+See https://sketchfab.com/developers/download-api , https://sketchfab.com/developers/download-api/guidelines :
+
+> Models licensing
+>
+> More than 700,000 3D models are available for download under Creative Commons licenses. Most models allow commercial use. However, Creative Commons licenses require that anyone who uses the model must credit the author and the source (Sketchfab). Your app should clearly display the license of the model as well as author attribution. Typically, this includes the creator’s username and a link to the Sketchfab model.
+
 ## Authors
 
 Michalis Kamburelis and GitHub Copilot. Or the other way around.
