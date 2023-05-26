@@ -48,13 +48,14 @@ Purpose: Sketchfab integration with [Castle Game Engine](https://castle-engine.i
     * If you want to download a particular model, then comment out
 
         ```
-        ModelID := TSketchfabModel.SearchGetFirst(Query);
+        Model := TSketchfabModel.SearchGetFirst(Query);
         ```
 
         in code with a simple hardcoded value for your model, e.g.
 
         ```
-        ModelID := '42002fa6abcc41e18abeb3da9edca096';
+        Model := TSketchfabModel.Create;
+        Model.ModelId := '42002fa6abcc41e18abeb3da9edca096';
         ```
 
 ## Licensing
