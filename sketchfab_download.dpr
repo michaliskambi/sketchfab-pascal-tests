@@ -17,13 +17,21 @@
 
 {$apptype CONSOLE}
 
-program SketchfabDownload;
+program sketchfab_download;
 
-uses SysUtils, Classes, Generics.Collections,
-  {$ifndef VER3_0} OpenSSLSockets, {$endif}
-  fpHTTPClient, fpJSON, JSONParser, Zipper,
+uses
+  { Using CThreads, as threads are required by TCastleDownload asynchronous version.
+    Note: All downloads in this application are actually synchronous (blocking),
+    you could rewrite it to just use blocking TCastleDownload.Download.
+    But we want to show how to use asynchronous TCastleDownload as that's
+    what we'll use in CGE editor to not freeze UI. }
+  {$ifdef UNIX} CThreads, {$endif}
+  SysUtils, Classes, Generics.Collections,
+  {$ifndef VER3_0} OpenSslSockets, {$endif}
+  FpJson, JsonParser, Zipper,
+  { CGE units }
   CastleFilesUtils, CastleDownload, CastleStringUtils, CastleURIUtils, CastleLog,
-  CastleUtils;
+  CastleUtils, CastleClassUtils, CastleApplicationProperties;
 
 const
   { Sketchfab API returns thumbnails in various sizes,
@@ -64,6 +72,11 @@ type
     { Run view3dscene on extracted model. }
     procedure RunView3dscene;
   end;
+
+{ Show progress of download in a console,
+  waiting for download to finish.
+  Make exception if download fails. }
+procedure WaitForFinish(const Description: String; const Download: TCastleDownload); forward;
 
 { TSketchfabModel (class methods) --------------------------------------------- }
 
@@ -108,7 +121,7 @@ class function TSketchfabModel.Search(const Query: String): TSketchfabModelList;
   end;
 
 var
-  HTTP: TFPHTTPClient;
+  Download: TCastleDownload;
   Response: String;
   JSONData: TJSONData;
   JSONArray: TJSONArray;
@@ -117,9 +130,13 @@ var
   Model: TSketchfabModel;
 begin
   Result := TSketchfabModelList.Create(true);
-  HTTP := TFPHTTPClient.Create(nil);
+  Download := TCastleDownload.Create(nil);
   try
-    Response := HTTP.Get('https://api.sketchfab.com/v3/search?type=models&downloadable=true&q=' + InternalUriEscape(Query));
+    Download.Url := 'https://api.sketchfab.com/v3/search?type=models&downloadable=true&q=' + InternalUriEscape(Query);
+    Download.Start;
+    WaitForFinish('Searching Sketchfab', Download);
+    Response := StreamToString(Download.Contents);
+
     JSONData := GetJSON(Response);
 
     WritelnLog('Got response, storing in response-search.json (for debug)');
@@ -151,7 +168,7 @@ begin
     end else
       raise Exception.Create('Unexpected JSON response: ' + Response);
   finally
-    FreeAndNil(HTTP);
+    FreeAndNil(Download);
   end;
 end;
 
@@ -209,17 +226,20 @@ const
   ApiUrl = 'https://api.sketchfab.com/v3/models';
   ApiToken = {$I sketchfab_token.inc};
 var
-  Client: TFPHTTPClient;
+  Download: TCastleDownload;
   Response: String;
   JSONData: TJSONData;
 begin
-  Client := TFPHTTPClient.Create(nil);
+  Download := TCastleDownload.Create(nil);
   try
-    WritelnLog('Starting download of model id ', ModelId);
-    Client.AddHeader('Authorization', 'Token ' + ApiToken);
-    Response := Client.Get(ApiUrl + '/' + ModelId + '/download');
+    WritelnLog('Starting download of model id ' + ModelId);
+    Download.HttpHeader('Authorization', 'Token ' + ApiToken);
+    Download.Url := ApiUrl + '/' + ModelId + '/download';
+    Download.Start;
+    WaitForFinish('Starting download of model', Download);
+    Response := StreamToString(Download.Contents);
   finally
-    FreeAndNil(Client);
+    FreeAndNil(Download);
   end;
 
   WritelnLog('Got response, storing in response-download.json (for debug)');
@@ -239,15 +259,17 @@ end;
 
 procedure TSketchfabModel.DownloadZip;
 var
-  Stream: TStream;
+  Download: TCastleDownload;
 begin
-  EnableBlockingDownloads := true;
-  Stream := Download(DownloadURL, []);
+  Download := TCastleDownload.Create(nil);
   try
-    StreamSaveToFile(Stream, 'model.zip');
-    WritelnLog('Model downloaded to: model.zip, file size: ' + SizeToStr(Stream.Size));
+    Download.Url := DownloadURL;
+    Download.Start;
+    WaitForFinish('Downloading model', Download);
+    StreamSaveToFile(Download.Contents, 'model.zip');
+    WritelnLog('Model downloaded to: model.zip, file size: ' + SizeToStr(Download.Contents.Size));
   finally
-    FreeAndNil(Stream);
+    FreeAndNil(Download);
   end;
 end;
 
@@ -283,6 +305,46 @@ begin
     raise Exception.Create('view3dscene not found on $PATH, please install Castle Game Engine and make sure view3dscene is on $PATH');
   ExecuteProcess(Exe, ['model/' + ModelId + '/scene.gltf']);
 end;
+
+{ routines ------------------------------------------------------------------- }
+
+procedure WaitForFinish(const Description: String; const Download: TCastleDownload);
+const
+  MaxDots = 60;
+var
+  ProgressDots: Integer;
+
+  procedure BumpProgress(const NewProgress: Single);
+  var
+    NewProgressDots: Integer;
+  begin
+    NewProgressDots := Round(MaxDots * NewProgress);
+    MaxVar(NewProgressDots, ProgressDots); // do not go backward
+    Write(StringOfChar('.', NewProgressDots - ProgressDots));
+    ProgressDots := NewProgressDots;
+  end;
+
+begin
+  Write(Description + ': ');
+  ProgressDots := 0;
+
+  while Download.Status = dsDownloading do
+  begin
+    if Download.TotalBytes <> -1 then
+      BumpProgress(Download.DownloadedBytes / Download.TotalBytes);
+    Sleep(100);
+    ApplicationProperties._Update; // to process downloading
+  end;
+
+  if Download.Status = dsSuccess then
+    BumpProgress(1.0)
+  else
+    raise Exception.CreateFmt('Download failed: %s', [Download.ErrorMessage]);
+
+  Writeln;
+end;
+
+{ main ----------------------------------------------------------------------- }
 
 var
   Query: String = 'cthulhu';
