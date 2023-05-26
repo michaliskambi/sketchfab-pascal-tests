@@ -16,6 +16,6 @@ AndroidSigningProperties.txt
 sketchfab_token.inc
 
 # temp stuff
-response.json
+response*.json
 model.zip
 model/

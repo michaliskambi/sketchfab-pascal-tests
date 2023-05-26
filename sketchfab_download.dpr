@@ -13,7 +13,7 @@ program SketchfabDownload;
 uses SysUtils, Classes,
   {$ifndef VER3_0} OpenSSLSockets, {$endif}
   fpHTTPClient, fpJSON, JSONParser, Zipper,
-  CastleFilesUtils, CastleDownload, CastleStringUtils, CastleURIUtils;
+  CastleFilesUtils, CastleDownload, CastleStringUtils, CastleURIUtils, CastleLog;
 
 type
   TSketchfabModel = class
@@ -50,12 +50,22 @@ begin
   try
     Response := HTTP.Get('https://api.sketchfab.com/v3/search?type=models&downloadable=true&q=' + InternalUriEscape(Query));
     JSONData := GetJSON(Response);
+
+    WritelnLog('Got response, storing in response-search.json (for debug)');
+    StringToFile('response-search.json', Response);
+
     if JSONData.JSONType = jtObject then
     begin
       JSONArray := TJSONObject(JSONData).Arrays['results'];
       for I := 0 to JSONArray.Count - 1 do
       begin
         JSONObject := JSONArray.Objects[I];
+        // sanity check
+        if not JSONObject.Booleans['isDownloadable'] then
+        begin
+          WritelnWarning('Model %s not downloadable, even though we requested only downloadable');
+          Continue;
+        end;
         Result.Add(JSONObject.Strings['uid']);
       end;
     end else
@@ -69,15 +79,14 @@ class function TSketchfabModel.SearchGetFirst(const Query: String): String;
 var
   Models: TStringList;
   I: Integer;
-
 begin
   Models := TSketchfabModel.Search(Query);
   try
-    Writeln('Found ', Models.Count, ' models for query: ', Query);
+    WritelnLog('Found %d models for query: %s', [Models.Count, Query]);
     if Models.Count = 0 then
       raise Exception.Create('No models found for query: ' + Query);
     for I := 0 to Models.Count - 1 do
-      Writeln(I, ' : https://sketchfab.com/3d-models/', Models[I]);
+      WritelnLog('%d : https://sketchfab.com/3d-models/%s', [I, Models[I]]);
     Result := Models[0];
   finally
     FreeAndNil(Models);
@@ -86,8 +95,8 @@ end;
 
 procedure TSketchfabModel.StartDownload;
 const
-  API_URL = 'https://api.sketchfab.com/v3/models';
-  API_TOKEN = {$I sketchfab_token.inc};
+  ApiUrl = 'https://api.sketchfab.com/v3/models';
+  ApiToken = {$I sketchfab_token.inc};
 var
   Client: TFPHTTPClient;
   Response: String;
@@ -95,15 +104,15 @@ var
 begin
   Client := TFPHTTPClient.Create(nil);
   try
-    Writeln('Starting download of model id ', ModelID);
-    Client.AddHeader('Authorization', 'Token ' + API_TOKEN);
-    Response := Client.Get(API_URL + '/' + ModelID + '/download');
+    WritelnLog('Starting download of model id ', ModelID);
+    Client.AddHeader('Authorization', 'Token ' + ApiToken);
+    Response := Client.Get(ApiUrl + '/' + ModelID + '/download');
   finally
     FreeAndNil(Client);
   end;
 
-  Writeln('Got response, storing in response.json (for debug)');
-  StringToFile('response.json', Response);
+  WritelnLog('Got response, storing in response-download.json (for debug)');
+  StringToFile('response-download.json', Response);
 
   JSONData := GetJSON(Response);
   try
@@ -113,8 +122,8 @@ begin
     FreeAndNil(JSONData);
   end;
 
-  Writeln('Downloading model from: ', DownloadURL);
-  Writeln('Download size: ', SizeToStr(DownloadSize));
+  WritelnLog('Downloading model from: '+ DownloadURL);
+  WritelnLog('Download size: ' + SizeToStr(DownloadSize));
 end;
 
 procedure TSketchfabModel.DownloadZip;
@@ -125,7 +134,7 @@ begin
   Stream := Download(DownloadURL, []);
   try
     StreamSaveToFile(Stream, 'model.zip');
-    Writeln('Model downloaded to: model.zip, file size: ', SizeToStr(Stream.Size));
+    WritelnLog('Model downloaded to: model.zip, file size: ' + SizeToStr(Stream.Size));
   finally
     FreeAndNil(Stream);
   end;
@@ -151,7 +160,7 @@ begin
     FreeAndNil(Zip);
   end;
 
-  Writeln('Model extracted to: ', DirName);
+  WritelnLog('Model extracted to: ' + DirName);
 end;
 
 procedure TSketchfabModel.RunView3dscene;
@@ -169,6 +178,8 @@ var
   ModelID: String;
   Model: TSketchfabModel;
 begin
+  InitializeLog;
+
   if ParamCount >= 1 then
     Query := ParamStr(1);
   ModelID := TSketchfabModel.SearchGetFirst(Query);
